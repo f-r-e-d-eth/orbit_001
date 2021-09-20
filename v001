@@ -1,0 +1,202 @@
+#!/usr/bin/python3
+
+# https://github.com/Influenceth/influence-utils/blob/00f6838b616d5c7113720b0f883c2a2d55a41267/index.js#L218
+
+# https://github.com/MichaelVerdegaal/InfluenceOrbitMapper
+
+# 1 https://github.com/Influenceth/influence-utils/tree/00f6838b616d5c7113720b0f883c2a2d55a41267
+
+import math
+
+a = 2.192; #// Semi-major axis
+e = 0.325; #// Eccentricity
+i = 0.002443460952792061; #// Inclination
+o = 3.4108969571725183; #// Longitude of ascending node
+w = 5.283809777487633; #// Argument of periapsis
+m = 0.9480628496833199; #// Mean anomoly at epoch
+
+print("Semi-major axis " + str(a) +" in au")
+print()
+
+def getRadius(t,a,e):
+    #return a * (1 - Math.pow(e, 2)) / (1 + e * Math.cos(t));
+    return a * (1 - e*e) / (1 + e * math.cos(t))
+
+print(getRadius(0.4,a,e))
+
+def getPosByAngle(t,i,o,w):
+
+    # Distance to the point from the orbit focus.
+    r = getRadius(t,a,e);
+
+    # Cartesian transformation
+    x = r * (math.cos(o) * math.cos(t + w) - math.sin(o) * math.sin(t + w) * math.cos(i));
+    y = r * (math.sin(o) * math.cos(t + w) + math.cos(o) * math.sin(t + w) * math.cos(i));
+    z = r * (math.sin(t + w) * math.sin(i));
+
+    return x,y,z
+
+x,y,z = getPosByAngle(0.4,i,o,w)
+
+print("x= " + str(x))
+print("y= " + str(y))
+print("z= " + str(z))
+
+def getPeriod(a):
+    thirdLaw = 0.000007495 # R^3 / T^2
+    return math.sqrt(math.pow(a, 3) / thirdLaw)
+
+print("Period " + str(getPeriod(a)))
+
+
+def getPositionAtTime(elapsed,a,e,i,o,w,m):
+
+    # Calculate the longitude of perihelion
+    p = w + o;
+
+    # Calculate mean motion based on assumption that mass of asteroid <<< Sun
+    k = 0.01720209895; # Gaussian constant (units are days and AU)
+    n = k / math.sqrt(math.pow(a, 3)); # Mean motion
+
+    # Calcualate the mean anomoly at elapsed time
+    M = m + (n * elapsed);
+
+    # Estimate the eccentric and true anomolies using an iterative approximation
+    E1=0;
+    E = M;
+    lastDiff = 1;
+
+    while (lastDiff > 0.0000001):
+      E1 = M + (e * math.sin(E));
+      lastDiff = abs(E1 - E);
+      E = E1;
+      print(" ++")
+    
+
+    # Calculate in heliocentric polar and then convert to cartesian
+    v = 2 * math.atan(math.sqrt((1 + e) / (1 - e)) * math.tan(E / 2));
+    r = a * (1 - math.pow(e, 2)) / (1 + e * math.cos(v)); # Current radius in AU
+    
+    x = r * (math.cos(o) * math.cos(v + p - o) - (math.sin(o) * math.sin(v + p - o) * math.cos(i)))
+    y = r * (math.sin(o) * math.cos(v + p - o) + math.cos(o) * math.sin(v + p - o) * math.cos(i))
+    z = r * math.sin(v + p - o) * math.sin(i)
+
+
+    return x,y,z
+
+x,y,z = getPositionAtTime(1000,a,e,i,o,w,m)
+
+print("x= " + str(x))
+print("y= " + str(y))
+print("z= " + str(z))
+
+"""
+break
+
+  /**
+    * The distance in AU from center of the ellipse to the object
+    * @param t Angular parameter (in radians)
+    */
+  getRadius(t) {
+    const a = this.a;
+    const e = this.e;
+    return a * (1 - Math.pow(e, 2)) / (1 + e * Math.cos(t));
+  }
+
+  /**
+   * Returns Cartesian coordinates at a specific angular parameter
+   * @param t Angular parmeter (in radians)
+   */
+  getPosByAngle(t) {
+    const i = this.i;
+    const o = this.o;
+    const w = this.w;
+
+    // Distance to the point from the orbit focus.
+    const r = this.getRadius(t);
+
+    // Cartesian transformation
+    const x = r * (Math.cos(o) * Math.cos(t + w) - Math.sin(o) * Math.sin(t + w) * Math.cos(i));
+    const y = r * (Math.sin(o) * Math.cos(t + w) + Math.cos(o) * Math.sin(t + w) * Math.cos(i));
+    const z = r * (Math.sin(t + w) * Math.sin(i));
+
+    const point = { x: x, y: y, z: z };
+    return point;
+  }
+
+  /**
+   * Returns an numPoints sized array of uniformly (in radians) separated points along the orbit path
+   * @param numPoints Number of points to create along an orbit
+   */
+  getSmoothOrbit(numPoints) {
+    const points = [];
+    const delta = 2 * Math.PI / numPoints;
+    let angle = 0;
+
+    for (let i = 0; i < numPoints; i++) {
+      points.push(this.getPosByAngle(angle));
+      angle += delta;
+    }
+
+    return points;
+  }
+
+  /**
+   * Retrieves the orbital period in days
+   */
+  getPeriod() {
+    const thirdLaw = 0.000007495; // R^3 / T^2
+    return Math.sqrt(Math.pow(this.a, 3) / thirdLaw);
+  }
+
+  /**
+   * Retrieves Cartesian coordinates in AU at a specified elapsed time
+   * @param elapsed Time in days (in-game) since game START_TIMESTAMP
+   */
+  getPositionAtTime(elapsed) {
+    const a = this.a;
+    const e = this.e;
+    const i = this.i;
+    const o = this.o;
+    const w = this.w;
+    const m = this.m;
+
+    // Calculate the longitude of perihelion
+    const p = w + o;
+
+    // Calculate mean motion based on assumption that mass of asteroid <<< Sun
+    const k = 0.01720209895; // Gaussian constant (units are days and AU)
+    const n = k / Math.sqrt(Math.pow(a, 3)); // Mean motion
+
+    // Calcualate the mean anomoly at elapsed time
+    const M = m + (n * elapsed);
+
+    // Estimate the eccentric and true anomolies using an iterative approximation
+    let E1;
+    let E = M;
+    let lastDiff = 1;
+
+    while (lastDiff > 0.0000001) {
+      E1 = M + (e * Math.sin(E));
+      lastDiff = Math.abs(E1 - E);
+      E = E1;
+    }
+
+    // Calculate in heliocentric polar and then convert to cartesian
+    const v = 2 * Math.atan(Math.sqrt((1 + e) / (1 - e)) * Math.tan(E / 2));
+    const r = a * (1 - Math.pow(e, 2)) / (1 + e * Math.cos(v)); // Current radius in AU
+
+    const pos = {
+      x: r * (Math.cos(o) * Math.cos(v + p - o) - (Math.sin(o) * Math.sin(v + p - o) * Math.cos(i))),
+      y: r * (Math.sin(o) * Math.cos(v + p - o) + Math.cos(o) * Math.sin(v + p - o) * Math.cos(i)),
+      z: r * Math.sin(v + p - o) * Math.sin(i)
+    };
+
+    return {
+      x: +pos.x.toFixed(10),
+      y: +pos.y.toFixed(10),
+      z: +pos.z.toFixed(10)
+    }
+  }
+};
+"""
