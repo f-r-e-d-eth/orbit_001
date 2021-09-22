@@ -1,0 +1,154 @@
+#!/usr/bin/python3
+
+# Code from
+# https://github.com/MichaelVerdegaal/InfluenceOrbitMapper
+
+import math
+import json
+import pandas as pd
+import plotly.graph_objects as go
+
+
+def load_roids(json_file):
+    """
+    Loads asteroids from the json file
+    :param json_file: json file path
+    :return: dataframe
+    """
+
+    def orbital_period(a):
+        """
+        Calculate orbital period of asteroid via keplers 3rd law
+        :param a: semi-major axis
+        :return: orbital period
+        """
+        third_law = 0.000007495
+        return int(math.sqrt(math.pow(a, 3) / third_law))
+
+    roids = []
+    with open(json_file) as f:
+        for line in f:
+            roids.append(json.loads(line))
+
+    roids = pd.json_normalize(roids)  # Flatten nested JSON
+    roids['orbital.T'] = roids.apply(lambda x: orbital_period(x['orbital.a']), axis=1)  # Add orbital period
+    # roids['orbital.i'] = roids.apply(lambda x: degrees(x['orbital.i']), axis=1)  # Convert inclination radian to degrees
+    return roids
+
+
+def get_roid(roids, id):
+    """
+    Get an asteroid by it's ID
+    :param roids: asteroid dataframe
+    :param id: id to look up
+    :return: asteroid as dataframe
+    """
+    if 1 <= id <= 250000:
+        return roids[roids['i'] == id].to_dict(orient='records')[0]
+    else:
+        raise SyntaxWarning("Improper asteroid ID")
+
+def position_at_adalia_day_manual(rock, adalia_day):
+    """
+    Direct copy of https://github.com/Influenceth/influence-utils/blob/00f6838b616d5c7113720b0f883c2a2d55a41267/index.js#L288
+    Translated from JS to Python
+    :param rock:
+    :param adalia_day:
+    :return:
+    """
+    a = rock['orbital.a']
+    e = rock['orbital.e']
+    i = rock['orbital.i']
+    o = rock['orbital.o']
+    w = rock['orbital.w']
+    m = rock['orbital.m']
+
+    # Calculate the longitude of perihelion
+    p = w + o
+
+    # Calculate mean motion based on assumption that mass of asteroid <<< Sun
+    k = 0.01720209895  # Gaussian constant (units are days and AU)
+    n = k / math.sqrt(math.pow(a, 3))  # Mean motion
+
+    # Calcualate the mean anomoly at elapsed time
+    M = m + (n * adalia_day)
+
+    # Estimate the eccentric and true anomolies using an iterative approximation let E1let E = M let lastDiff = 1
+    E1 = None
+    E = M
+    last_diff = 1
+
+    while last_diff > 0.0000001:
+        E1 = M + (e * math.sin(E))
+        last_diff = abs(E1 - E)
+        E = E1
+
+    # Calculate in heliocentric polar and then convert to cartesian
+    v = 2 * math.atan(math.sqrt((1 + e) / (1 - e)) * math.tan(E / 2))
+    r = a * (1 - math.pow(e, 2)) / (1 + e * math.cos(v))  # Current radius in AU
+
+    # Cartesian coordinates
+    x = r * (math.cos(o) * math.cos(v + p - o) - (math.sin(o) * math.sin(v + p - o) * math.cos(i)))
+    y = r * (math.sin(o) * math.cos(v + p - o) + math.cos(o) * math.sin(v + p - o) * math.cos(i))
+    z = r * math.sin(v + p - o) * math.sin(i)
+    return x, y, z
+
+##############################################################################################################
+
+print("Start Load Json")
+roids = load_roids('asteroids_20210418.json')
+print("Json is loaded")
+
+Adalia_Day = 100;
+Route       = [1, 5, 9, 13, 33, 104, 4192]; #Roid Numbers
+Travel_Time = [3, 2, 5,  1,  2,   3,    3]; #Adalia Days 
+
+Roid_pos_now_x = [];
+Roid_pos_now_y = [];
+Roid_pos_Arrival_x = [];
+Roid_pos_Arrival_y = [];
+rock_tail=[];
+
+print("Travel " + str(Route) + " on Day " + str(Adalia_Day))
+
+i=0
+TravelTime=0
+
+for Rock_Number in Route:
+ print("TravelTime "+str(TravelTime))
+ rock = get_roid(roids, Rock_Number)
+ x,y,z = position_at_adalia_day_manual(rock, Adalia_Day)
+ Roid_pos_now_x.append(x)
+ Roid_pos_now_y.append(y)
+ xa,ya,za = position_at_adalia_day_manual(rock, Adalia_Day+TravelTime)
+ Roid_pos_Arrival_x.append(xa)
+ Roid_pos_Arrival_y.append(ya)
+ xo,yo,zo = position_at_adalia_day_manual(rock, Adalia_Day-10) # Old position
+ rock_tail.append([x,xo,y,yo])
+ i=i+1
+ TravelTime=TravelTime+Travel_Time[i-1]
+
+# Plot
+fig = go.Figure()
+
+fig.update_layout(paper_bgcolor="#000000")
+fig.update_layout(plot_bgcolor ="#000000")
+fig.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_layout(yaxis=dict(scaleanchor="x", scaleratio=1))
+
+for tail in rock_tail:
+ fig.add_trace(go.Scatter(x=tail[0:2], y=tail[2:4], mode='lines', name='Tail',line=dict(color="#808080") ))
+
+fig.add_trace(go.Scatter(x=Roid_pos_Arrival_x, y=Roid_pos_Arrival_y, mode='markers', name='Roid_Arrival',
+                                                                                       marker=dict(color='#000000',size=10,
+                                                                                       line=dict(width=2,color='#808080')) ))
+
+fig.add_trace(go.Scatter(x=Roid_pos_now_x, y=Roid_pos_now_y, mode='markers+text', name='Roid', text=Route, textposition='bottom center',
+                                                                                       marker=dict(color='#3dc9b3',size=10,
+                                                                                       line=dict(width=2,color='#808080')) ))
+
+fig.add_trace(go.Scatter(x=Roid_pos_Arrival_x, y=Roid_pos_Arrival_y, mode='lines',   name='Route',line=dict(width=1,color="#1f1ba7") ))
+
+fig.show()
+
