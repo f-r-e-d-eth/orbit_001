@@ -95,11 +95,15 @@ def position_at_adalia_day_manual(rock, adalia_day):
 
 ##############################################################################################################
 
-print("Start Load Json")
+print("Start")
+#from datetime import datetime
+import datetime, time
+print("Load Json")
 roids = load_roids('asteroids_20210418.json')
 print("Json is loaded")
 
-Adalia_Day = 100;
+Adalia_Day = (time.mktime(datetime.datetime.now().timetuple()) - 1609459200)/3600 # Now
+
 Route       = [1, 5, 9, 13, 33, 104, 4192]; #Roid Numbers
 Travel_Time = [3, 2, 5,  1,  2,   3,    3]; #Adalia Days 
 
