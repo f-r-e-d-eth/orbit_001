@@ -4,6 +4,7 @@
 # https://en.wikipedia.org/wiki/Tsiolkovsky_rocket_equation
 
 import math
+import random
 import plotly.graph_objects as go
 
 def dv_RocketEq(ve,m0,mf):
@@ -12,56 +13,119 @@ def dv_RocketEq(ve,m0,mf):
  # mf final total mass in kg
  return ve * math.log(m0/mf)
 
-m0 = 1000*1000; #kg (Total mass of the ship)
-dm =   10*1000; # Burnrate kg/s
-bt = 50; # Burn time in s
-ve = 1000*1000; # exhaust velocity in m/s
-ct = 100; # cruise time in s
 
-t = [*range(1,bt)]
+dt =     1*60*60; # s (1h in game 1/24h RL steps)
+m0 =   1000*1000; # kg (Total mass of the ship)
+dm =           3; # Burnrate kg/s
+bt =       24*dt; # Burn time in s (24 hours AT / 1 in game day)
+ve = 2*1000*1000;# exhaust velocity in m/s Raptor 330s x 10m/s² = 3 300 m/s
+                #                          Space Shuttle          4 500 m/s
+                #                          Ideal 2H+O             5 020 m/s
+                #                          Ion Drive  NEXT       41 900 m/s
+                #                                   - DS4G      193 000 m/s
+                #                          speed of light   299 792 458 m/s
+ct = 0*dt; # cruise time in s
+
+t = [*range(0,bt,dt)]
 v = [0]
 m = [m0]
 v_i = 0;
+x = [0];
+a = [0];
+Mass_Start = m0; # in kg
+Trav_Dist  =  0; # in m
 
 for i in t: # Acceleration
- mf = m0 - dm
+ mf = m0 - dm*dt
  dv_i = dv_RocketEq(ve,m0,mf)
  v_i = v_i + dv_i
- m0 = m0 - dm
+ m0 = m0 - dm*dt
+ Trav_Dist += v_i*dt
  v.append(v_i)
  m.append(m0)
+ x.append(Trav_Dist)
+ a.append(abs(dv_i/dt))
 
-for i in range(1,ct): # Cruise
+for i in range(1,ct,dt): # Cruise
+ Trav_Dist += v_i*dt
  v.append(v_i)
  m.append(m0)
- t.append(bt+i)
+ t.append(bt+i*dt)
+ x.append(Trav_Dist)
+ a.append(0)
 
 i=0
 while v_i > 0: # Stop
  i += 1
- mf = m0 - dm
+ mf = m0 - dm*dt
  dv_i = dv_RocketEq(ve,m0,mf)
  v_i = v_i - dv_i
- m0 = m0 - dm
+ m0 = m0 - dm*dt
+ Trav_Dist += v_i*dt
  v.append(v_i)
  m.append(m0)
- t.append(bt+ct+i)
+ t.append(bt+ct+i*dt)
+ x.append(Trav_Dist)
+ a.append(abs(dv_i/dt))
 
+v = [i/1e3 for i in v] # Scale speed in km/s
+Mass_arrivel = m[-1]
 m = [i/max(m)*max(v) for i in m] # Scale mass to speed for the graph
-
+x_arrivel = x[-1]
+x = [i/max(x)*max(v) for i in x] # Scale mass to speed for the graph
+Time_arrivel = t[-1]
+t = [i/60/60/24 for i in t] # Scale mass to speed for the graph in Tagen (Adalia Days)
+Accel_max = max(a)
+Accel_avr = sum(a)/len(a)
+a = [i/max(a)*max(v) for i in a]
+a[0] = a[1]
 ###############################################################################################
 
-fig2 = go.Figure()
+fig = go.Figure()
 
-fig2.update_layout(paper_bgcolor="#000000")
-fig2.update_layout(plot_bgcolor ="#000000")
-fig2.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
-fig2.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_layout(paper_bgcolor="#000000")
+fig.update_layout(plot_bgcolor ="#000000")
+fig.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.layout.xaxis.color = '#3dc9b3'
+fig.layout.yaxis.color = '#3dc9b3'
+fig.layout.legend.font.color = '#3dc9b3'
+fig.layout.xaxis.title = "Time in game days"
+fig.layout.yaxis.title = "Speed in km/s"
 
-fig2.add_trace(go.Scatter(x=t, y=v, mode='markers+lines', name='Speed',
+name_text = "Speed "+str(round(max(v)))+"km/s (av."+str(round(x_arrivel/Time_arrivel/1000))+"km/s)"
+fig.add_trace(go.Scatter(x=t, y=v, mode='markers+lines', name=name_text,
                                      marker=dict(color='#3dc9b3',size=5,
-                                     line=dict(width=2,color='#808080')) ))
-fig2.add_trace(go.Scatter(x=t, y=m, mode='markers+lines', name='Mass',
+                                     line=dict(width=2,color='#3dc9b3')) ))
+name_text = 'Mass '+str(round(Mass_arrivel/Mass_Start*100))+"% (Burned "+ str(round((1-Mass_arrivel/Mass_Start)*100))+"%)"
+fig.add_trace(go.Scatter(x=t, y=m, mode='markers+lines', name=name_text,
                                      marker=dict(color='#ffffff',size=3,
                                      line=dict(width=2,color='#ffffff')) ))
-fig2.show()
+name_text = 'Dist '+str(round(x_arrivel/1000/1e6))+"M km"
+fig.add_trace(go.Scatter(x=t, y=x,  mode='markers+lines', name=name_text,
+                                     marker=dict(color='#00ff00',size=3,
+                                     line=dict(width=2,color='#00ff00')) ))
+name_text = 'Accel max '+str(round(Accel_max/10,1))+"g (av."+str(round(Accel_avr/10,1))+"g)"
+fig.add_trace(go.Scatter(x=t, y=a,  mode='markers+lines', name=name_text,
+                                     marker=dict(color='#ff0000',size=3,
+                                     line=dict(width=2,color='#ff0000')) ))
+fig.show()
+
+###############################################################################################
+# Validating
+
+print("Travel time Time_arrivel = "+str(round(Time_arrivel))+" s")
+print("Travel time Time_arrivel = "+str(round(Time_arrivel/3600))+" h")
+
+print("Travel distance Time_arrivel = "+str(round(x_arrivel))+" m")
+print("Travel distance Time_arrivel = "+str(round(x_arrivel/1e9))+" Mkm")
+
+print("average speed Dist/time = " + str(round(x_arrivel/Time_arrivel)) + " m/s")
+print("average speed Dist/time = " + str(round(x_arrivel/Time_arrivel/1000)) + " km/s")
+
+
+print("Max speed ~2 x average Speed = " + str(round(2*x_arrivel/Time_arrivel/1000)) + " km/s")
+print("Max speed ~2 x average Speed = " + str(round(2*x_arrivel/Time_arrivel/299792458,6)) + " c")
+print("Average acceleration = 2 x (Average_speed / Travel_time) / (1/2 x Travel_time) ")
+print("Average acceleration dv/dt " + str(round(2*x_arrivel/Time_arrivel/(0.5*Time_arrivel),1)) + " m/s")
+print("Average acceleration dv/dt " + str(round(2*x_arrivel/Time_arrivel/(0.5*Time_arrivel)/10,1)) + " g")
