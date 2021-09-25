@@ -45,7 +45,9 @@ for i in t: # Acceleration
  x.append(Trav_Dist)
  a.append(abs(dv_i/dt))
 
-for i in range(1,ct,dt): # Cruise
+i=0
+for n in range(1,ct,dt): # Cruise
+ i+=1
  Trav_Dist += v_i*dt
  v.append(v_i)
  m.append(m0)
