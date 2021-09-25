@@ -4,7 +4,6 @@
 # https://en.wikipedia.org/wiki/Tsiolkovsky_rocket_equation
 
 import math
-import random
 import plotly.graph_objects as go
 
 def dv_RocketEq(ve,m0,mf):
