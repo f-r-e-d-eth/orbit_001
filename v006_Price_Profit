@@ -3,182 +3,90 @@ import math
 import plotly.graph_objects as go
 
 #       #   Name   Product [Price in SWAY/kg, Available mass in kg]
-data = [ [123,"Rock A",[
-               ["Product A",
-                  [[10,50],[20,80],[40,30],[80,1000]], # Rock sell price / Schip buy price
-                  [[10,50],[20,80],[25,1000],[80,100]]  # Rock buy price / Schip sell price
-               ],
-               ["Product B",
-                  [[10,50],[20,80],[40,30],[80,1000]], # Rock sell price / Schip buy price
-                  [[10,50],[20,80],[40,30],[80,1000]]  # Rock buy price / Schip sell price
-               ],
-               ["Product C",
-                  [[5,250],[12,180],[20,30],[40,10]], # Rock sell price / Schip buy price
-                  [[8,250],[12,180],[20,30],[40,10]]  # Rock buy price / Schip sell price
-               ]]],
+data = [ [123,"Rock A",[ # Price, Volume
+               ["Product A", 30 , 1000],
+               ["Product B", 20 ,  200],
+               ["Product C", 10 ,   50]
+         ]],
          [999,"Rock B",[
-               ["Product A",
-                  [[70,30],[50,80],[40,30],[1,1]], # Rock sell price / Schip buy price
-                  [[5,1000],[10,80],[30,3000],[50,10]]  # Rock buy price / Schip sell price
-               ],
-               ["Product B",
-                  [], # Rock sell price / Schip buy price
-                  []  # Rock buy price / Schip sell price
-               ],
-               ["Product C",
-                  [[44,50],[50,80],[40,30],[1,1]], # Rock sell price / Schip buy price
-                  [[5,500],[15,80],[20,300]]  # Rock buy price / Schip sell price
-               ]]]
-        ]
+               ["Product A", 35 , 1000],
+               ["Product B", 30 ,  200],
+               ["Product C", 20 ,  150]
+         ]]
+       ]
 
-def profitList(PriceAvBuy,PriceAvSell):
+def PriceVolume(InitialPrice,InitialVolume,BuyVolume):
+    # price x availability = constant
+    if InitialVolume <= BuyVolume:
+     return -1
+    else:
+     return InitialPrice * InitialVolume / (InitialVolume-BuyVolume)
 
-    print("profitList - Start")
-    print(PriceAvBuy)
-    print(PriceAvSell)
+def ProfitVolume(BuyRock, SellRock, Product, Volume, data):
+    InitialPrice  = data[BuyRock][2][Product][1]
+    InitialVolume = data[BuyRock][2][Product][2]
+    Pr_Buy  = PriceVolume(InitialPrice,InitialVolume,Volume)
+    if Pr_Buy == -1:
+     return 0
+    InitialPrice  = data[SellRock][2][Product][1]
+    InitialVolume = data[SellRock][2][Product][2]
+    Pr_Sell = PriceVolume(InitialPrice,InitialVolume,-Volume)
+    if Pr_Sell == -1:
+     return 0
+    return Pr_Sell - Pr_Buy
 
-    profitList = []
-    i_buy  = 0
-    i_sell = len(PriceAvSell)-1
+MaxVolume = 100
+VolumeSteps = 20
+VolumeStep  = MaxVolume/VolumeSteps
+NoOfProducts = 3
 
-    Price2Buy      = PriceAvBuy[i_buy][0] # [First in the list is the cheapest to buy][0=Price]
-    Available2Buy  = PriceAvBuy[i_buy][1] # [First in the list is the cheapest to buy][1=Available]
-    Price2Sell     = PriceAvSell[i_sell][0] # [First in the list is the best price to sell][0=Price]
-    Available2Sell = PriceAvSell[i_sell][1] # [First in the list is the best price to sell][1=Available]
+BuyVolume = [0]*NoOfProducts
 
-    for i in range(1,10):
-     print(" -i_buy  "+str(i_buy))
-     print(" -i_sell "+str(i_sell))
-     print(" -Available2Buy      "+str(Available2Buy))
-     print(" -Available2Sell     "+str(Available2Sell))
-     print(" -Price2Buy          "+str(Price2Buy))
-     print(" -Price2Sell         "+str(Price2Sell))
+for i in range(1,VolumeSteps+1):
+ max_Profit = 0
+ max_Profit_Product = 0
+ 
+ for Product in range(0,NoOfProducts):
+  NewProductVolume = BuyVolume[Product] + VolumeStep
+  Profit = ProfitVolume( 0, 1, Product, NewProductVolume, data)
+  if max_Profit < Profit:
+   max_Profit = Profit
+   max_Profit_Product = Product
+ 
+ BuyVolume[max_Profit_Product] += VolumeStep
 
+print(BuyVolume)
 
-     if Available2Buy < Available2Sell:
-      #                  Available,    Buy Price,Sell Price
-      profitList.append([Available2Buy,Price2Buy,Price2Sell])
-      
-      Available2Sell -= Available2Buy
-      Available2Buy   = 0
-      i_buy += 1
-      if i_buy > (len(PriceAvSell)-1):
-       break
-      Price2Buy     = PriceAvBuy[i_buy][0] # [First in the list is the cheapest to buy][0=Price]
-      Available2Buy = PriceAvBuy[i_buy][1] # [First in the list is the cheapest to buy][1=Available]
-      if Price2Buy >= Price2Sell:
-       break
+# plot results
 
-     else:
-      #                  Available,    Buy Price, Sell Price
-      profitList.append([Available2Sell,Price2Buy,Price2Sell])
-      Available2Buy -= Available2Sell
-      Available2Sell = 0
-      i_sell -= 1
-      if i_sell < 0:
-       break
-      Price2Sell     = PriceAvSell[i_sell][0] # [First in the list is the best price to sell][0=Price]
-      Available2Sell = PriceAvSell[i_sell][1] # [First in the list is the best price to sell][1=Available]
-      if Price2Buy >= Price2Sell:
-       break    
+xx=[]
+yy=[]
 
-    print("profitList - End")
-    return profitList
-
-def percentProfit(BuyPrice,SellPrice):
-    return (SellPrice-BuyPrice)/BuyPrice*100
-
-def sortFunc(e):
-  return e[4] # Percent profit
-
-def getOptLoad(RockBuy,RockSell,MaxLoad,data):
-    # RockBuy  - Rocknumber for buing products from
-    # RockSell - Rocknumber for selling products to
-    # MaxLoad  - Maximum mass cargo capacety in kg
-
-    RockBuyNo  = 0 # Number in data List not Rocknumber 
-    RockSellNo = 1 # Number in data List not Rocknumber 
-
-    LoadList = []
-
-    for ProductNo in range(0,3):
-     #ProductNo  = 2 # Number in data 
+for i in range(0,NoOfProducts):
+ xx.extend([BuyVolume[i],BuyVolume[i],''])
+ yy0 = PriceVolume(data[0][2][i][1],data[0][2][i][2],BuyVolume[i])
+ yy1 = PriceVolume(data[1][2][i][1],data[1][2][i][2],-BuyVolume[i])
+ yy.extend([yy0,yy1,''])
 
 
-     if data[RockBuyNo][2][ProductNo][1]!=[] and data[RockSellNo][2][ProductNo][2]!=[]: 
-      # d
-     #else:
-      #                             R             P          B       R              P          S    Rock Product Buy=1/Sell=2
-      profit_List = profitList(data[RockBuyNo][2][ProductNo][1],data[RockSellNo][2][ProductNo][2])   
+Volume = []
+BuyPrice = []
+SellPrice = []
 
-      for i in range(0,len(profit_List)):
-        profit_List[i].append(ProductNo) # Add the product number to each entry
-        profit_List[i].append(round(percentProfit(profit_List[i][1],profit_List[i][2])))
-      print(profit_List)
+for i in range(0,NoOfProducts):
+ BuyPrice.append([])
+ SellPrice.append([])
 
-      LoadList.extend(profit_List)
+for i in range(0,VolumeSteps):
+ BuyVolume = i*VolumeStep
+ Volume.append(BuyVolume)
+ for i2 in range(0,NoOfProducts):
 
-    print(LoadList)
-    # sort the list for most profital trades
-    LoadList.sort(reverse=True, key=sortFunc)
-    print(LoadList)
-
-    Load_kg = 0
-    capaLoadList = []
-    # cut the list on the max transport capacety of the ship 
-    for line in LoadList:
-      Load_kg += line[0] # mass
-      if Load_kg < MaxLoad:
-        capaLoadList.append(line)
-      else:
-        line[0] = line[0]-(Load_kg-MaxLoad)
-        Load_kg = MaxLoad
-        capaLoadList.append(line)
-        break
-
-    print("mass in kg = "+str(Load_kg))
-    
-    return capaLoadList, Load_kg
-
-def getBuyPrice(LoadList):
- BuyPrice = 0
- for line in LoadList:
-  BuyPrice += line[0]*line[1]
- return BuyPrice
-
-def getSellPrice(LoadList):
- SellPrice = 0
- for line in LoadList:
-  SellPrice += line[0]*line[2]
- return SellPrice
-  
-##########################################################
-MassCargo = []
-Profit = []
-ProfitPercent = []
-ProfitInclFuel_20 = []
-ProfitInclFuel_50 = []
-ProfitInclFuel_80 = []
-
-for i in range(1,50):
- MaxMass = i/30*500
-
- LoadList,Mass = getOptLoad(123,999,MaxMass,data)
-
- MassCargo.append(Mass)
- Profit.append(getSellPrice(LoadList) - getBuyPrice(LoadList))
- ProfitPercent.append( round((getSellPrice(LoadList) - getBuyPrice(LoadList))/getBuyPrice(LoadList)*100) )
- ProfitInclFuel_20.append(getSellPrice(LoadList) - getBuyPrice(LoadList)*(1.2)) # 20% of the Cargo cost
- ProfitInclFuel_50.append(getSellPrice(LoadList) - getBuyPrice(LoadList)*(1.5))
- ProfitInclFuel_80.append(getSellPrice(LoadList) - getBuyPrice(LoadList)*(1.8))
-
- print("getSellPrice(LoadList) "+str(getSellPrice(LoadList)))
- print("getBuyPrice(LoadList)  "+str(getBuyPrice(LoadList)))
- print(LoadList)
-
-print("MassCargo             "+str(MassCargo))
-print("Profit                "+str(Profit))
-print("ProfitPercentProfit   "+str(ProfitPercent))
+  BuyPr = PriceVolume(data[0][2][i2][1],data[0][2][i2][2],BuyVolume)
+  SellPr= PriceVolume(data[1][2][i2][1],data[1][2][i2][2],-BuyVolume)
+  if BuyPr!=-1 and SellPr!=-1:
+   BuyPrice[i2].append(BuyPr)
+   SellPrice[i2].append(SellPr)
 
 # Plot
 fig = go.Figure()
@@ -187,28 +95,27 @@ fig.update_layout(paper_bgcolor="#000000")
 fig.update_layout(plot_bgcolor ="#000000")
 fig.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
 fig.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
-#fig.update_layout(yaxis=dict(scaleanchor="x", scaleratio=1))
 
-fig.update_layout(legend=dict(
-        title_font_family="Times New Roman",
-        font=dict(
-            family="Courier",
-            size=12,
-            color="#000000"
-        ),
-        bgcolor="LightSteelBlue",
-        bordercolor="Black",
-        borderwidth=2
-    )
+fig.update_layout(legend=dict(font=dict(family="Courier",size=12,color="#000000"),
+        bgcolor="LightSteelBlue",bordercolor="Black",borderwidth=2)
 )
 
-fig.add_trace(go.Scatter(x=MassCargo, y=Profit, mode='markers+lines', name='Profit (Free fuel)',
-                                     marker=dict(color='#ffffff',size=10) ))
-fig.add_trace(go.Scatter(x=MassCargo, y=ProfitInclFuel_20, mode='markers+lines', name='Fuel cost 20% of Cargo',
-                                     marker=dict(color='#00ff00',size=10) ))
-fig.add_trace(go.Scatter(x=MassCargo, y=ProfitInclFuel_50, mode='markers+lines', name='Fuel cost 50% of Cargo',
-                                     marker=dict(color='#0000ff',size=10) ))
-fig.add_trace(go.Scatter(x=MassCargo, y=ProfitInclFuel_80, mode='markers+lines', name='Fuel cost 80% of Cargo',
+fig.add_trace(go.Scatter(x=Volume, y=BuyPrice[0], mode='markers+lines', name='Buy Price A',
                                      marker=dict(color='#ff0000',size=10) ))
+fig.add_trace(go.Scatter(x=Volume, y=SellPrice[0], mode='markers+lines', name='Sell Price A',
+                                     marker=dict(color='#990000',size=10) ))
+
+fig.add_trace(go.Scatter(x=Volume, y=BuyPrice[1], mode='markers+lines', name='Buy Price B',
+                                     marker=dict(color='#00ff00',size=10) ))
+fig.add_trace(go.Scatter(x=Volume, y=SellPrice[1], mode='markers+lines', name='Sell Price B',
+                                     marker=dict(color='#009900',size=10) ))
+
+fig.add_trace(go.Scatter(x=Volume, y=BuyPrice[2], mode='markers+lines', name='Buy Price C',
+                                     marker=dict(color='#0000ff',size=10) ))
+fig.add_trace(go.Scatter(x=Volume, y=SellPrice[2], mode='markers+lines', name='Sell Price C',
+                                     marker=dict(color='#000099',size=10) ))
+
+fig.add_trace(go.Scatter(x=xx, y=yy, mode='markers+lines', name='Volume',
+                                     marker=dict(color='#ffffff',size=10) ))
 
 fig.show()
