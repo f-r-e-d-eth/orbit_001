@@ -22,6 +22,19 @@ def PriceVolume(InitialPrice,InitialVolume,BuyVolume):
     else:
      return InitialPrice * InitialVolume / (InitialVolume-BuyVolume)
 
+def TotalPriceVolume(InitialPrice,InitialVolume,MaxBuyVolume):
+    # Integral InitialPrice * InitialVolume / (InitialVolume-BuyVolume) d_BuyVolume
+    #  = - InitialPrice * InitialVolume * log( InitialVolume - BuyVolume )
+    #  for BuyVolume form 0 to MaxBuyVolume
+    #  = -InitialPrice * InitialVolume * log( 1 - MaxBuyVolume / InitialVolume )
+    if InitialVolume <= MaxBuyVolume:
+     return -1
+    else:
+     if MaxBuyVolume > 0:
+      return -InitialPrice * InitialVolume * math.log( 1 - MaxBuyVolume / InitialVolume  )
+     else:
+      return  InitialPrice * InitialVolume * math.log( 1 - MaxBuyVolume / InitialVolume  )
+
 def ProfitVolume(BuyRock, SellRock, Product, Volume, data):
     InitialPrice  = data[BuyRock][2][Product][1]
     InitialVolume = data[BuyRock][2][Product][2]
@@ -35,27 +48,66 @@ def ProfitVolume(BuyRock, SellRock, Product, Volume, data):
      return 0
     return Pr_Sell - Pr_Buy
 
+def TradeListVolume(MaxVolume,data):
+
+    VolumeSteps = 20
+    VolumeStep  = MaxVolume/VolumeSteps
+    NoOfProducts = 3
+
+    BuyVolume = [0]*NoOfProducts
+
+    for i in range(1,VolumeSteps+1):
+     max_Profit = 0
+     max_Profit_Product = 0
+ 
+     for Product in range(0,NoOfProducts):
+      NewProductVolume = BuyVolume[Product] + VolumeStep
+      Profit = ProfitVolume( 0, 1, Product, NewProductVolume, data)
+      if max_Profit < Profit:
+       max_Profit = Profit
+       max_Profit_Product = Product
+ 
+     BuyVolume[max_Profit_Product] += VolumeStep
+
+    return BuyVolume
+
+def ProfitBuyVolume(BuyVolume,data):
+
+    NoOfProducts = 3
+
+    # Determine the profit
+    TotalBuyPrice  = 0
+    TotalSellPrice = 0
+    for i in range(0,NoOfProducts):
+     TotalBuyPrice +=TotalPriceVolume(data[0][2][i][1],data[0][2][i][2], BuyVolume[i])
+     TotalSellPrice+=TotalPriceVolume(data[1][2][i][1],data[1][2][i][2],-BuyVolume[i])
+     #print(str(TotalBuyPrice)+" "+str(TotalSellPrice))
+
+    return TotalSellPrice-TotalBuyPrice,TotalSellPrice,TotalBuyPrice
+
 MaxVolume = 100
 VolumeSteps = 20
 VolumeStep  = MaxVolume/VolumeSteps
 NoOfProducts = 3
 
-BuyVolume = [0]*NoOfProducts
+Trade_Volume = [0]
+Profit_Volume_00 = [0]
+Profit_Volume_05 = [0]
+Profit_Volume_10 = [0]
+Profit_Volume_15 = [0]
 
-for i in range(1,VolumeSteps+1):
- max_Profit = 0
- max_Profit_Product = 0
- 
- for Product in range(0,NoOfProducts):
-  NewProductVolume = BuyVolume[Product] + VolumeStep
-  Profit = ProfitVolume( 0, 1, Product, NewProductVolume, data)
-  if max_Profit < Profit:
-   max_Profit = Profit
-   max_Profit_Product = Product
- 
- BuyVolume[max_Profit_Product] += VolumeStep
+for TradeVolume in range(int(MaxVolume/10),MaxVolume,int(MaxVolume/10)):
 
-print(BuyVolume)
+ TradeVolumeList = TradeListVolume(TradeVolume,data)
+ Profit,BuyPrice,SellPrice = ProfitBuyVolume(TradeVolumeList,data)
+
+ print(TradeVolumeList)
+ print(str(round(Profit))+" "+str(round(Profit/BuyPrice*100)))
+ Trade_Volume.append(TradeVolume)
+ Profit_Volume_00.append(Profit)
+ Profit_Volume_05.append(Profit-BuyPrice*0.05)
+ Profit_Volume_10.append(Profit-BuyPrice*0.10)
+ Profit_Volume_15.append(Profit-BuyPrice*0.15)
 
 # plot results
 
@@ -63,9 +115,9 @@ xx=[]
 yy=[]
 
 for i in range(0,NoOfProducts):
- xx.extend([BuyVolume[i],BuyVolume[i],''])
- yy0 = PriceVolume(data[0][2][i][1],data[0][2][i][2],BuyVolume[i])
- yy1 = PriceVolume(data[1][2][i][1],data[1][2][i][2],-BuyVolume[i])
+ xx.extend([TradeVolumeList[i],TradeVolumeList[i],''])
+ yy0 = PriceVolume(data[0][2][i][1],data[0][2][i][2],TradeVolumeList[i])
+ yy1 = PriceVolume(data[1][2][i][1],data[1][2][i][2],-TradeVolumeList[i])
  yy.extend([yy0,yy1,''])
 
 
@@ -82,7 +134,7 @@ for i in range(0,VolumeSteps):
  Volume.append(BuyVolume)
  for i2 in range(0,NoOfProducts):
 
-  BuyPr = PriceVolume(data[0][2][i2][1],data[0][2][i2][2],BuyVolume)
+  BuyPr = PriceVolume(data[0][2][i2][1],data[0][2][i2][2], BuyVolume)
   SellPr= PriceVolume(data[1][2][i2][1],data[1][2][i2][2],-BuyVolume)
   if BuyPr!=-1 and SellPr!=-1:
    BuyPrice[i2].append(BuyPr)
@@ -119,3 +171,30 @@ fig.add_trace(go.Scatter(x=xx, y=yy, mode='markers+lines', name='Volume',
                                      marker=dict(color='#ffffff',size=10) ))
 
 fig.show()
+
+#################
+
+fig2 = go.Figure()
+
+fig2.update_layout(paper_bgcolor="#000000")
+fig2.update_layout(plot_bgcolor ="#000000")
+fig2.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig2.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+
+fig2.update_layout(legend=dict(font=dict(family="Courier",size=12,color="#000000"),
+        bgcolor="LightSteelBlue",bordercolor="Black",borderwidth=2)
+)
+
+fig2.add_trace(go.Scatter(x=Trade_Volume, y=Profit_Volume_00, mode='markers+lines', name='Profit (Free Fuel)',
+                                     marker=dict(color='#ff0000',size=10) ))
+
+fig2.add_trace(go.Scatter(x=Trade_Volume, y=Profit_Volume_05, mode='markers+lines', name='Profit  -5% Fuel cost',
+                                     marker=dict(color='#cc0000',size=10) ))
+
+fig2.add_trace(go.Scatter(x=Trade_Volume, y=Profit_Volume_10, mode='markers+lines', name='Profit -10% Fuel cost',
+                                     marker=dict(color='#990000',size=10) ))
+
+fig2.add_trace(go.Scatter(x=Trade_Volume, y=Profit_Volume_15, mode='markers+lines', name='Profit -15% Fuel cost',
+                                     marker=dict(color='#660000',size=10) ))
+
+fig2.show()
