@@ -1,0 +1,295 @@
+#!/usr/bin/python3
+import math
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+# Ship Values
+ShipDryMass  = 1000 # kg
+ShipMaxCargo = 5000 # kg
+ShipMaxFuel  = 5000 # kg
+ShipExhaustVelocity = 2*1000*1000 # m/s
+
+Ship = {
+  "DryMass"  : 1000, # kg
+  "MaxCargo" : 5000, # kg
+  "MaxFuel"  : 5000, # kg
+  "ExhaustVelocity" : 2*1000*1000 # m/s
+}
+
+# Constants to be determined before 
+
+RoutNoMax = 3 # Maximum number of destinations
+
+#         0     1          2          3    4              5               6
+#               SWAY       kg         -    SWAY/kg        kg              Mkm
+#         Rout  MaxProfit, MaxVolume, p50, initFuelPrice, initFuelVolume, TravelDistance
+data = [ ["A-B", 300000, 100000,      0.6,   2          , 100000        , 100], #0
+         ["B-C",  50000,   5500,      0.3,   8          ,   6000        , 200], #1
+         ["C-D", 100000,  50000,      0.7,   1          ,  10000        ,  50]  #2
+       ]
+
+# Variables to be optimize
+#         % of ShipMaxCargo    % of FuelLoaded
+#                    % of ShipMaxFuel
+#         CargoLoad, FuelLoad, FuelBurned,
+opt  = [ [      100,      100,        80],
+         [      100,       50,       100],
+         [      100,      100,       100]
+       ]
+
+############
+# Opi
+
+#                 0-1        0-1         0-1       0-1
+def Profit(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship):
+ MaxProfit = data[Route][1]
+ MaxVolume = data[Route][2]
+ p50       = data[Route][3]
+ Profit = MaxProfit * (1-math.exp(-Ship["MaxCargo"]*CargoLoad/MaxVolume/p50))/(1-math.exp(-1/p50))
+
+ initFuelPrice  = data[Route][4]
+ initFuelVolume = data[Route][5]
+ Profit -= -initFuelPrice * initFuelVolume * math.log(1 - Ship["MaxFuel"]*FuelLoad / initFuelVolume) 
+ 
+ return Profit
+
+def TradeTravlTime(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship):
+
+ TravelDistance = data[Route][6]*1000*1000*1000 # m
+ ShipTotaStartMass = Ship["DryMass"] + Ship["MaxCargo"]*CargoLoad + Ship["MaxFuel"]*(FuelStored+FuelLoad)
+ ShipTotaEndMass   = Ship["DryMass"] + Ship["MaxCargo"]*CargoLoad + Ship["MaxFuel"]*(FuelStored+FuelLoad)*(1-FuelBurned)
+ TravelAverageSpeed =  1/2 * 1/2 * Ship["ExhaustVelocity"] * math.log(ShipTotaStartMass/ShipTotaEndMass) # m/s
+ TradeTravlTime = TravelDistance / TravelAverageSpeed # s
+ return TradeTravlTime
+
+
+#                       0-1        0-1         0-1       0-1
+def ProfitPerDay(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship):
+ #                                 FuelStored +FuelLoad <= 1
+
+ TotalProfit    = Profit(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship)
+ TradeTravlTime_ = TradeTravlTime(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship)
+
+ return TotalProfit/TradeTravlTime_*24*3600 # SWAY/Day
+
+
+def optiProfitPerDaySingleRout(Route,data,Ship):
+
+ MaxProfitPerDay = ProfitPerDay(Route, 1, 0, 1, 1, data, Ship)
+ for i in range(1,100):
+  CargoLoad  = 100/100
+  FuelStored = 0/100
+  FuelLoad   = 100*(1-i/99)/100
+  FuelBurned  = 100/100
+  New = ProfitPerDay(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship)
+  if New > MaxProfitPerDay:
+   MaxProfitPerDay = New
+  else:
+   result = [100,(1-(i-1)/99)*100,100]
+   break
+ return result
+
+# Start values for the optimation 
+opt  = [ optiProfitPerDaySingleRout(0,data,Ship),
+         optiProfitPerDaySingleRout(1,data,Ship),
+         optiProfitPerDaySingleRout(2,data,Ship)
+       ]
+
+print(opt)
+
+def ProfitPerDay(opt,data,Ship):
+
+ SumProfit = 0
+ SumTime = 0
+
+ for Route in range(0,len(opt)):
+
+  CargoLoad  = opt[Route][0]/100
+  if Route == 0:
+   FuelStored = 0
+  else:
+   FuelStored = opt[Route-1][1]/100 * (100-opt[Route-1][2])/100
+
+  FuelLoad   = opt[Route][1]/100
+  FuelBurned = opt[Route][2]/100
+  
+  SumProfit += Profit(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship)
+  SumTime   += TradeTravlTime(Route, CargoLoad, FuelStored, FuelLoad, FuelBurned, data, Ship)/24/3600
+
+ return SumProfit/SumTime
+
+def optiProfitPerDay(opt,data,Ship):
+ 
+ step = 1
+ MaxDiff = 0
+ MaxDiff_i2 = 0
+ MaxDiff_i3 = 0
+ ProfitPerDay_a = 0
+ opt0=[[0,0,0],[0,0,0],[0,0,0]]
+ lastProfitPerDay_ = 0
+ ddDiff = 100
+ counter = 0
+
+ for i in range(1,300):
+  ProfitPerDay_ = ProfitPerDay(opt,data,Ship)
+  for i2 in range(0,3):  # Go throgh all parameter
+   for i3 in range(0,3): # Go throug all routs
+    opt[i2][i3]  = opt[i2][i3] + step
+    opt0[i2][i3] = np.sign(ProfitPerDay_-ProfitPerDay(opt,data,Ship)) # sign(diff) -1,0,1
+    opt[i2][i3]  = opt[i2][i3] - step
+
+  dDiff = lastProfitPerDay_ - ProfitPerDay_
+  lastProfitPerDay_ = ProfitPerDay_
+  
+  if 10/(10+i-counter)<0.5:
+   print("break @"+str(i))
+   break
+  if dDiff < 0:
+   counter += 1
+
+  for i2 in range(0,3):  # Go throgh all parameter
+   for i3 in range(0,3): # Go throug all routs
+    opt[i2][i3] = max(min(opt[i2][i3] - opt0[i2][i3]*10/(10+i-counter),100),0)
+  print(opt)
+  print(opt0)
+  #print("dDiff "+str(dDiff)+" PrPD "+str(ProfitPerDay_)+" // "+str(10/(10+i-counter)))
+
+ return ProfitPerDay_
+
+print(optiProfitPerDay(opt,data,Ship))
+print(opt)
+
+#exit()
+
+############
+# Plot
+
+TradeVolume=[[],[],[]]
+TradeProfit=[[],[],[]]
+FuelVolume=[[],[],[]]
+FuelCost=[[],[],[]]
+
+TradeVariVolum=[[],[],[]]
+TradeVariables=[[],[],[]]
+TradeTravlTime=[0,0,0]
+
+for r in range(0,RoutNoMax): # Rout number
+
+ CargoLoad = opt[r][0]/100
+ TradeVariVolum[r].append(ShipMaxCargo*CargoLoad)
+ MaxProfit = data[r][1]
+ MaxVolume = data[r][2]
+ p50       = data[r][3]
+ TradeVariables[r].append( MaxProfit * (1-math.exp(-ShipMaxCargo*CargoLoad/MaxVolume/p50))/(1-math.exp(-1/p50)) )
+
+ FuelLoad  = opt[r][1]/100
+ TradeVariVolum[r].append(ShipMaxFuel*FuelLoad)
+ initFuelPrice  = data[r][4]
+ initFuelVolume = data[r][5]
+ TradeVariables[r].append( -initFuelPrice * initFuelVolume * math.log(1 - ShipMaxFuel*FuelLoad / initFuelVolume) )
+
+ FuelBurned  = opt[r][2]/100
+ TradeVariVolum[r].append(ShipMaxFuel*FuelLoad*FuelBurned)
+ TradeVariables[r].append( -initFuelPrice * initFuelVolume * math.log(1 - ShipMaxFuel*FuelLoad*FuelBurned / initFuelVolume) )
+
+ TravelDistance = data[r][6]*1000*1000*1000 # m
+ ShipTotaStartMass = ShipDryMass + ShipMaxCargo*CargoLoad + ShipMaxFuel*FuelLoad
+ ShipTotaEndMass   = ShipDryMass + ShipMaxCargo*CargoLoad + ShipMaxFuel*FuelLoad*(1-FuelBurned)
+ TravelAverageSpeed =  1/2 * 1/2 * ShipExhaustVelocity * math.log(ShipTotaStartMass/ShipTotaEndMass) # m/s
+ TradeTravlTime[r] = TravelDistance / TravelAverageSpeed # s
+
+ for i in range(0,100):      # Counter in 100 steps
+
+  MaxVolume = data[r][2]
+  CargoVolume  = i/99*MaxVolume
+  TradeVolume[r].append(CargoVolume)
+
+  MaxProfit = data[r][1]
+  p50       = data[r][3]
+  TradeProfit[r].append( MaxProfit * (1-math.exp(-CargoVolume/MaxVolume/p50))/(1-math.exp(-1/p50)) )
+
+  FuelBuyVolume = i/99*ShipMaxFuel
+  FuelVolume[r].append(FuelBuyVolume)
+
+  initFuelPrice  = data[r][4]
+  initFuelVolume = data[r][5]
+  FuelCost[r].append(-initFuelPrice * initFuelVolume * math.log(1 - FuelBuyVolume / initFuelVolume) )
+
+
+# Plot the input informations
+
+xAxisMax = max(ShipMaxCargo,ShipMaxFuel)*1.2
+yAxisMax = 60000
+
+fig = make_subplots(rows=2, cols=3, subplot_titles=("A-B", "B-C", "C-D"))
+
+fig.update_layout(paper_bgcolor="#000000")
+fig.update_layout(plot_bgcolor ="#000000")
+fig.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_xaxes(color='#3dc9b3')
+fig.update_yaxes(color='#3dc9b3')
+
+fig.update_layout(legend=dict(font=dict(family="Courier",size=12,color="#3dc9b3"),
+                  bgcolor="#000000",bordercolor="#3dc9b3",borderwidth=2)     )
+
+fig.for_each_annotation(lambda a: a.update(font=dict(color = '#3dc9b3', size=20)) )
+
+fig.update_yaxes(title_text="SWAY", range=[0, yAxisMax], row=1, col=1)
+fig.update_yaxes(title_text="",     range=[0, yAxisMax], row=1, col=2)
+fig.update_yaxes(title_text="",     range=[0, yAxisMax], row=1, col=3)
+
+text = "cargo/fuel mass <br> <br>travel time "+str(round(TradeTravlTime[0]/24/3600,2))+" Adalia days <br>"
+text += "Cargo loaded " + str(round(opt[0][0])) + " %<br>"
+text += "Fuel preload " + str(round(0)) + " %<br>"
+text += "Fuel loaded  " + str(round(opt[0][1])) + " %<br>"
+text += "Fuel burned  " + str(round(opt[0][2]))
+fig.add_annotation(dict(font=dict(color='#3dc9b3',size=15), showarrow=False, text=text,
+                   textangle=0, xanchor='center', yanchor='top', xref='x domain', yref='y domain',
+                   x=0.5, y=-0.15),row=1, col=1)
+fig.update_xaxes(title_text='', range=[0, xAxisMax], row=1, col=1)
+
+text = "cargo/fuel mass <br> <br>travel time "+str(round(TradeTravlTime[1]/24/3600,2))+" Adalia days <br>"
+text += "Cargo loaded " + str(round(opt[1][0])) + " %<br>"
+text += "Fuel preload " + str(round(opt[0][1]*(100-opt[0][2])/100)) + " %<br>"
+text += "Fuel loaded  " + str(round(opt[1][1])) + " %<br>"
+text += "Fuel burned  " + str(round(opt[1][2]))
+fig.add_annotation(dict(font=dict(color='#3dc9b3',size=15), showarrow=False, text=text,
+                   textangle=0, xanchor='center', yanchor='top', xref='x domain', yref='y domain',
+                   x=0.5, y=-0.15),row=1, col=2)
+fig.update_xaxes(title_text='', range=[0, xAxisMax], row=1, col=2)
+
+text = "cargo/fuel mass <br> <br>travel time "+str(round(TradeTravlTime[2]/24/3600,2))+" Adalia days <br>"
+text += "Cargo loaded " + str(round(opt[2][0])) + " %<br>"
+text += "Fuel preload " + str(round(opt[1][1]*(100-opt[1][2])/100)) + " %<br>"
+text += "Fuel loaded  " + str(round(opt[2][1])) + " %<br>"
+text += "Fuel burned  " + str(round(opt[2][2]))
+fig.add_annotation(dict(font=dict(color='#3dc9b3',size=15), showarrow=False, text=text,
+                   textangle=0, xanchor='center', yanchor='top', xref='x domain', yref='y domain',
+                   x=0.5, y=-0.15),row=1, col=3)
+fig.update_xaxes(title_text='', range=[0, xAxisMax], row=1, col=3)
+
+fig.add_trace(go.Scatter(x=TradeVolume[0], y=TradeProfit[0], mode='markers+lines', name='Profit (Free Fuel)',
+                                     marker=dict(color='#3dc9b3',size=3) ),row=1, col=1)
+fig.add_trace(go.Scatter(x=TradeVolume[1], y=TradeProfit[1], mode='markers+lines', name='Profit (Free Fuel)',
+                                     marker=dict(color='#3dc9b3',size=3),showlegend = False ),row=1, col=2)
+fig.add_trace(go.Scatter(x=TradeVolume[2], y=TradeProfit[2], mode='markers+lines', name='Profit (Free Fuel)',
+                                     marker=dict(color='#3dc9b3',size=3),showlegend = False ),row=1, col=3)
+
+fig.add_trace(go.Scatter(x=FuelVolume[0], y=FuelCost[0], mode='markers+lines', name='Fuel cost',
+                                     marker=dict(color='#ff0000',size=3) ),row=1, col=1)
+fig.add_trace(go.Scatter(x=FuelVolume[1], y=FuelCost[1], mode='markers+lines', name='Fuel cost',
+                                     marker=dict(color='#ff0000',size=3),showlegend = False ),row=1, col=2)
+fig.add_trace(go.Scatter(x=FuelVolume[2], y=FuelCost[2], mode='markers+lines', name='Fuel cost',
+                                     marker=dict(color='#ff0000',size=3),showlegend = False ),row=1, col=3)
+
+fig.add_trace(go.Scatter(x=TradeVariVolum[0], y=TradeVariables[0], mode='markers', name='Optimal load',
+                                     marker=dict(color='#ffffff',size=7) ),row=1, col=1)
+fig.add_trace(go.Scatter(x=TradeVariVolum[1], y=TradeVariables[1], mode='markers', name='opt',
+                                     marker=dict(color='#ffffff',size=7),showlegend = False ),row=1, col=2)
+fig.add_trace(go.Scatter(x=TradeVariVolum[2], y=TradeVariables[2], mode='markers', name='opt',
+                                     marker=dict(color='#ffffff',size=7),showlegend = False ),row=1, col=3)
+fig.show()
+
+exit()
