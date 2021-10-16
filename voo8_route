@@ -1,0 +1,171 @@
+#!/usr/bin/python3
+import math
+import random
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+rocks   = [0]
+rocks_x = [0]
+rocks_y = [0]
+
+MaxRadius = 100
+MaxRocks  = 20
+MaxRouts  = 2
+
+for i in range(1,MaxRocks):
+ rocks.append(i)
+ radius = 0.9*MaxRadius*math.pow(random.random(),0.5)
+ angel  = 360*MaxRadius*random.random()
+ rocks_x.append(radius*math.sin(angel))
+ rocks_y.append(radius*math.cos(angel))
+
+Routs_Start = []
+Routs_Final = []
+Routs_List  = []
+
+i2 = 0 
+for i in range(0,MaxRouts):
+ RStart = round((MaxRocks-1)*random.random())
+ RFinal = round((MaxRocks-1)*random.random())
+ if RStart != RFinal:
+  Routs_Start.append(RStart)
+  Routs_Final.append(RFinal)
+  Routs_List.append(i2)
+  i2+=1
+
+Routs_x = []
+Routs_y = []
+
+#Rocks with cheap fuel
+
+FuelRocks   = [0]
+FuelRocks_x = [0]
+FuelRocks_y = [0]
+
+for i in range(0,round(MaxRocks/5)):
+  FuelRocks.append(round((MaxRocks-1)*random.random()))
+  FuelRocks_x.append(rocks_x[FuelRocks[-1]])
+  FuelRocks_y.append(rocks_y[FuelRocks[-1]])
+
+def FindNextFuelRock(FuelRocks,Pos):
+ minDist = 9999999999
+ for i in FuelRocks:
+  Dist  = pow(rocks_x[i]-rocks_x[Pos],2)
+  Dist += pow(rocks_y[i]-rocks_y[Pos],2)
+  Dist  = pow(Dist,0.5)
+  if minDist > Dist:
+   minDist = Dist
+   NextFuelRock=i
+ return NextFuelRock
+
+def FindNextRoutStart(Routs_List,Pos):
+ minDist = 9999999999
+ for i in Routs_List:
+  Dist  = pow(rocks_x[Routs_Start[i]]-rocks_x[Pos],2)
+  Dist += pow(rocks_y[Routs_Start[i]]-rocks_y[Pos],2)
+  Dist  = pow(Dist,0.5)
+  if minDist > Dist:
+   minDist = Dist
+   NextRout=i
+ Routs_List.remove(NextRout)
+ return NextRout
+
+
+def FindShortestRout(FuelRocks,Pos,Goal):
+ # min(pos->FuelStaion->Goal)
+ minDist = 9999999999
+ for fr in FuelRocks:
+  Dist1  = pow(rocks_x[fr]-rocks_x[Pos],2)
+  Dist1 += pow(rocks_y[fr]-rocks_y[Pos],2)
+  Dist1  = pow(Dist1,0.5)
+  Dist2  = pow(rocks_x[fr]-rocks_x[Goal],2)
+  Dist2 += pow(rocks_y[fr]-rocks_y[Goal],2)
+  Dist2  = pow(Dist2,0.5)
+  Dist   = Dist1+Dist2
+  if minDist > Dist:
+   minDist = Dist
+   NextFuelRock=fr
+ return NextFuelRock
+
+Travel   = [0]
+Travel_x = [0]
+Travel_y = [0]
+
+Pos = 0
+
+for i in range(0,len(Routs_List)):
+  Route = FindNextRoutStart(Routs_List,Pos)    # The next best trade route
+  FuelR = FindShortestRout(FuelRocks,Pos,Routs_Start[Route]) # Nearest fuel rock
+  Travel.append(FuelR)
+  Travel.append(Routs_Start[Route])
+  Travel.append(Routs_Final[Route])
+  Pos = Routs_Final[Route]
+
+TravelList = [0]
+
+for i in range(0,len(Travel)-1):
+ if Travel[i] != Travel[i+1]:
+  TravelList.append(Travel[i+1])
+
+for i in range(0,len(Travel)):
+  Travel_x.append(rocks_x[Travel[i]])
+  Travel_y.append(rocks_y[Travel[i]])
+
+############################################################
+# Plot
+
+
+fig = make_subplots(rows=1, cols=2, subplot_titles=("Map", "2"))
+
+fig.update_layout(paper_bgcolor="#000000")
+fig.update_layout(plot_bgcolor ="#000000")
+fig.update_xaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_yaxes(showline=True, linewidth=1, linecolor='black', gridcolor='grey',zeroline=True, zerolinewidth=2, zerolinecolor='grey')
+fig.update_xaxes(color='#3dc9b3')
+fig.update_yaxes(color='#3dc9b3')
+
+fig.update_layout(legend=dict(font=dict(family="Courier",size=12,color="#3dc9b3"),
+                  bgcolor="#000000",bordercolor="#3dc9b3",borderwidth=2)     )
+
+fig.update_xaxes(title_text="", range=[-MaxRadius, MaxRadius], row=1, col=1)
+fig.update_yaxes(title_text="", range=[-MaxRadius, MaxRadius], row=1, col=1)
+
+fig.add_trace(go.Scatter(x=rocks_x, y=rocks_y, mode='markers', name='rocks',
+                                     marker=dict(color='#3dc9b3',size=17) ),row=1, col=1)
+
+for i in range(0,len(rocks_x)):
+ fig.add_annotation( 
+  x =rocks_x[i],  # arrows' head
+  y =rocks_y[i],  # arrows' head
+  xref='x',  yref='y',#  axref='x',  ayref='y',
+  text=i,
+  font=dict(color = '#000000', size=10),
+  showarrow=False, row=1, col=1)
+
+for i in range(0,len(Routs_Start)):
+ fig.add_annotation(
+  x =rocks_x[Routs_Final[i]],  # arrows' head
+  y =rocks_y[Routs_Final[i]],  # arrows' head
+  ax=rocks_x[Routs_Start[i]],  # arrows' tail
+  ay=rocks_y[Routs_Start[i]],  # arrows' tail
+  xref='x',  yref='y',  axref='x',  ayref='y',
+  text='',  # if you want only the arrow
+  showarrow=True,  arrowhead=3,  arrowsize=1,  arrowwidth=3,
+  arrowcolor='#ffffff',row=1, col=1
+)
+
+fig.add_trace(go.Scatter(x=FuelRocks_x, y=FuelRocks_y, mode='markers', name='fuel',
+                                     marker=dict(color='#ff0000',size=17) ),row=1, col=1)
+
+fig.add_trace(go.Scatter(x=Travel_x, y=Travel_y, mode='lines', name='travel',
+                                     marker=dict(color='#3dc9b3',size=3) ),row=1, col=1)
+
+text = "Travel List: "+str(TravelList)
+
+fig.add_annotation(dict(font=dict(color='#3dc9b3',size=15), showarrow=False, text=text,
+                   textangle=0, xanchor='center', yanchor='top', xref='paper', yref='paper',
+                   x=0, y=-MaxRadius*0.9,bgcolor="black"),row=1, col=1)
+
+fig.show()
+
+exit()
