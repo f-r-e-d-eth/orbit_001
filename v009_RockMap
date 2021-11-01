@@ -1,0 +1,117 @@
+import React from "react";
+import ReactDOM from "react-dom";
+
+const size = 300;
+
+const plots =100;
+const goldenRatio = (1+Math.sqrt(5))/2;
+
+const nodes = [];
+for (let i = 0; i < plots; i++) {
+  const theta = 2*Math.PI * i / goldenRatio;
+  const phi   = Math.acos(1-2*(i+0.5)/plots)
+  if (Math.cos(phi)>0){
+    nodes.push({ 
+      x: size/2*Math.cos(theta)*Math.sin(phi), 
+      y: size/2*Math.sin(theta)*Math.sin(phi),
+      z: size/2*Math.cos(phi),
+      xx: 0,
+      yy: 0,
+      open: true });
+  };
+ //console.log(theta);
+}
+
+const graph = {
+  nodes,
+  links: [
+    { source: nodes[1], target: nodes[2] },
+    { source: nodes[2], target: nodes[3] },
+    { source: nodes[3], target: nodes[4] },
+    { source: nodes[4], target: nodes[5] },
+    { source: nodes[5], target: nodes[6] }
+  ]
+};
+
+class CustomNode extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { open: true };
+    this.toggle = this.toggle.bind(this);
+  }
+  toggle() {
+    this.setState(prevState => {
+      return {
+        open: !prevState.open
+      };
+    });
+  }
+  render() {
+    const { node } = this.props;
+    //console.log(node);
+    return (
+      <circle
+        r={5}
+        fill="#21D4FD"
+        cx={size/2+node.x}
+        cy={size/2+node.y}
+        onClick={this.toggle}
+      />
+    );
+  }
+}
+
+function CustomLink({ link }) {
+  return (
+    <line
+      x1={link.source.x+size/2}
+      y1={link.source.y+size/2}
+      x2={link.target.x+size/2}
+      y2={link.target.y+size/2}
+      strokeWidth={2}
+      stroke="#999"
+      strokeOpacity={0.6}
+      marker-end="url(#arrow)"
+    />
+  );
+}
+
+function Demo({ width, height }) {
+  return (
+    <svg width={width} height={height}>
+      <defs>
+        <marker
+          id="arrow"
+          viewBox="0 -5 10 10"
+          refX="15"
+          refY="-.5"
+          markerWidth="4"
+          markerHeight="4"
+          orient="auto"
+          fill="#fff"
+        >
+          <path d="M0,-5L10,0L0,5" />
+        </marker>
+      </defs>
+      <rect width={width} height={height} rx={14} fill="#272b4d" />
+      {graph.links.map(link => {
+        console.log(link);
+        return <CustomLink link={link} />;
+      })}
+      {graph.nodes.map(node => {
+        return <CustomNode node={node} />;
+      })}
+    </svg>
+  );
+}
+
+function App() {
+  return (
+    <div className="App">
+      <Demo width={size} height={size} />
+    </div>
+  );
+}
+
+const rootElement = document.getElementById("root");
+ReactDOM.render(<App />, rootElement);
